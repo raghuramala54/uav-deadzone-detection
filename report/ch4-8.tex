@@ -1,0 +1,316 @@
+% ============================================================
+%  ch4-8.tex — Sniffing, Dead-zone, Rogue-AP, Alert, Analytics
+% ============================================================
+
+\chapter{Packet Sniffing Technology}
+\label{ch:sniff}
+
+\section{Overview}
+\textbf{Packet sniffing} is the act of capturing packets of data flowing across a
+network. The software or device that does this is a \emph{packet sniffer}. Its
+legitimate uses are to analyse network performance and troubleshoot
+communication problems; the same technique can be abused to capture credentials.
+All network data travels as individual, variable-size packets; a sniffer places
+the wireless interface in \textbf{monitor} mode so that it receives all 802.11
+frames on the channel rather than only frames addressed to it.
+
+Sniffing is used by network managers to check whether a network is healthy or
+congested, by ISPs for browsing-behaviour analysis, and by security teams to
+audit traffic. The pipeline is: place the interface in monitor mode, intercept
+traffic, capture raw data, and analyse it \emph{without modifying} packets.
+
+\section{Capture Stack}
+The sensing payload captures only 802.11 \emph{management} frames --- beacons and
+probe responses --- which carry exactly the fields the detection logic needs
+(source BSSID, SSID, channel, advertised security and RSSI) without touching user
+payloads. Capture is driven programmatically with \code{Scapy}, so each frame is
+parsed into a structured record the moment it arrives; \code{Kismet} provides
+wireless-specific surveying with GPS tagging, and \code{tshark} supports scripted
+analysis. All three emit structured output (PCAPNG / JSON) that feeds directly
+into the analytics pipeline of \Cref{ch:analytics}.
+
+\begin{highlight}[Passive by construction]
+The capture stack never associates, injects, deauthenticates or decrypts. It
+reads broadcast management frames that every access point already transmits, so a
+survey leaves the target network completely undisturbed and collects no private
+content --- a property that also keeps the system within an authorised
+security-testing remit (\Cref{sec:ethics}).
+\end{highlight}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=10mm and 14mm]
+  \node[startstop] (s) {START};
+  \node[io, below=of s] (install) {Place interface\\in monitor mode};
+  \node[proc, below=of install] (intercept) {Sniffer intercepts\\network traffic};
+  \node[proc, below=of intercept] (capture) {Sniffer captures\\raw data};
+  \node[proc, below=of capture] (nomod) {Sniff without\\modifying packets};
+  \node[decision, below=of nomod] (mgr) {Network\\manager?};
+  \node[proc, below left=14mm and 2mm of mgr] (normal) {Normal /\\Congestion};
+  \node[proc, right=of capture, xshift=8mm] (inject) {Structured record\\(BSSID, SSID, RSSI)};
+  \node[proc, below=of inject] (adv) {Analytics\\pipeline};
+  \node[proc, right=of mgr, xshift=4mm] (isp) {ISP: browsing\\behaviour analysis};
+  \node[proc, below=of isp] (gov) {Security teams:\\audit \& assurance};
+
+  \draw[flow] (s)--(install);
+  \draw[flow] (install)--(intercept);
+  \draw[flow] (intercept)--(capture);
+  \draw[flow] (capture)--(nomod);
+  \draw[flow] (nomod)--(mgr);
+  \draw[flow] (mgr)-|(normal) node[edgelbl,pos=0.25]{yes};
+  \draw[flow] (capture.east)--(inject);
+  \draw[flow] (inject)--(adv);
+  \draw[flow] (nomod.east)-|(isp);
+  \draw[flow] (isp)--(gov);
+\end{tikzpicture}
+\caption{Flow chart of packet sniffing.}
+\label{fig:sniff}
+\end{figure}
+
+% ============================================================
+\chapter{Dead-Zone Detection Methodology}
+\label{ch:dead}
+
+A \textbf{dead-zone} is a physical area where a device cannot obtain a usable
+wireless connection. Informally one can find dead spots by carrying a device and
+watching the signal indicator drop; the system automates this with a UAV and
+replaces the yes/no indicator with a measured signal surface.
+
+The communication payload comprises a wireless device with a GPS receiver that
+supplies positioning data. In operation, the UAV Wi-Fi receiver is initialised
+and made to fly through a secured network region, continuously scanning for
+access points. For each sampled location the system records, for every access
+point heard, the tuple
+$(\text{lat},\text{lon},\text{RSSI},\text{SNR},\text{channel},\text{BSSID})$.
+During the scan the system also distinguishes \emph{rogue} from \emph{secured}
+access points (\Cref{ch:rogue}).
+
+\section{Signal Surface and Thresholds}
+Rather than testing for a binary ``signal\,=\,0'' condition, the system keeps the
+strongest RSSI available at each sampled point and interpolates those samples into
+a continuous RF \textbf{heatmap} over the survey grid (inverse-distance / radial
+basis interpolation). A cell is classified against two thresholds:
+\begin{description}[leftmargin=1.6em,style=nextline]
+  \item[Dead] interpolated best RSSI below the usability floor
+    (e.g.\ $-82$\,dBm) or SNR below $\sim 10$\,dB, \emph{or} no sample within
+    support range (no service observed);
+  \item[Weak] signal above the floor but below a comfortable margin
+    (e.g.\ $-72$\,dBm), where a connection is fragile;
+  \item[OK] otherwise.
+\end{description}
+Reporting weak zones as well as dead ones exposes marginal coverage before it
+fails, which matters most at the shorter ranges of the 6\,GHz band.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=9mm and 16mm]
+  \node[startstop] (s) {START};
+  \node[io, below=of s] (init) {Initialise UAV\\Wi-Fi receiver};
+  \node[proc, below=of init] (fly) {Fly / move in a\\secured network};
+  \node[decision, below=of fly] (ap) {Access\\point?};
+  \node[io, below left=12mm and 6mm of ap] (dead) {Dead-zone\\detection};
+  \node[decision, below right=12mm and 2mm of ap] (rogue) {Rogue\\access\\point?};
+  \node[io, below=16mm of rogue] (avoid) {Avoid\\access point};
+  \node[io, right=of rogue] (secure) {Secured\\access point};
+  \node[startstop, below=38mm of dead] (stop) {STOP};
+
+  \draw[flow] (s)--(init);
+  \draw[flow] (init)--(fly);
+  \draw[flow] (fly)--(ap);
+  \draw[flow] (ap)-|(dead) node[edgelbl,pos=0.25]{no};
+  \draw[flow] (ap)-|(rogue) node[edgelbl,pos=0.25]{yes};
+  \draw[flow] (rogue)--(avoid) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (rogue)--(secure) node[edgelbl,pos=0.4]{no};
+  \draw[flow] (dead)|-(stop);
+  \draw[flow] (avoid)|-(stop);
+  \draw[flow] (secure)|-(stop);
+\end{tikzpicture}
+\caption{Flow chart of dead-zone detection methodology.}
+\label{fig:dead}
+\end{figure}
+
+% ============================================================
+\chapter{Rogue Access Point Detection}
+\label{ch:rogue}
+
+A \textbf{rogue access point} is a wireless access point installed on a secure
+network without the explicit authorisation of the network administrator ---
+whether added by a well-meaning employee or by a malicious attacker. To prevent
+them, organisations deploy Wireless Intrusion Prevention Systems (WIPS) that
+monitor the radio spectrum and audit access points continuously.
+
+\section{Multi-Signal Classification}
+Each BSSID observed during a survey is aggregated and classified by fusing an
+allow-list with several heuristics, so that no single evadable trait decides the
+outcome:
+\begin{enumerate}
+  \item \textbf{Allow-list} --- the BSSID (or its OUI prefix) is checked against
+        the managed-AP inventory; an unknown transmitter is suspect.
+  \item \textbf{Evil twin} --- a trusted SSID advertised by an unlisted BSSID.
+  \item \textbf{Security-capability mismatch} --- a clone of a trusted SSID
+        advertising \emph{weaker} security than the genuine network (for example,
+        an open or WPA2 beacon impersonating a WPA3 SSID).
+  \item \textbf{Hidden node} --- a non-broadcast SSID inside a managed network,
+        whose frames are dropped from the trusted set.
+\end{enumerate}
+The final label is the most severe hypothesis that fires, and every firing records
+a human-readable reason for the report.
+
+\begin{highlight}[Robust to current defences]
+Protected Management Frames (802.11w, mandatory under WPA3) defeat classic
+deauthentication-based evil-twin tricks and some passive heuristics, while client
+MAC randomization breaks naive device tracking. Because this classifier reasons
+about \emph{advertised identity and security capability} rather than about
+forged deauthentication responses, it keeps working under both: an open clone of
+a WPA3 SSID is still flagged by the capability-mismatch test even when every
+frame is protected.
+\end{highlight}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=9mm and 14mm]
+  \node[startstop] (s) {START};
+  \node[io, below=of s] (disc) {Network\\discovery};
+  \node[decision, below=of disc] (ap) {Access\\point?};
+  \node[decision, below=14mm of ap] (mgd) {Managed\\AP list?};
+  \node[decision, below=14mm of mgd] (hidden) {Hidden\\node?};
+  \node[proc, left=of hidden] (drop) {Packet\\dropping};
+  \node[decision, right=18mm of mgd] (sec) {Secured\\network?};
+  \node[io, below=14mm of hidden] (secap) {Secured\\access point};
+  \node[io, left=28mm of secap] (none) {No AP /\\Rogue AP};
+  \node[startstop, below=12mm of none] (stop) {STOP};
+
+  \draw[flow] (s)--(disc);
+  \draw[flow] (disc)--(ap);
+  \draw[flow] (ap)--(mgd) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (ap.west)-|(none) node[edgelbl,pos=0.2]{no};
+  \draw[flow] (mgd)--(hidden) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (mgd)--(sec) node[edgelbl,pos=0.4]{no};
+  \draw[flow] (hidden)--(drop) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (hidden)--(secap) node[edgelbl,pos=0.4]{no};
+  \draw[flow] (sec)|-(secap) node[edgelbl,pos=0.2]{yes};
+  \draw[flow] (drop)|-(none);
+  \draw[flow] (none)--(stop);
+  \draw[flow] (secap)|-(stop);
+\end{tikzpicture}
+\caption{Flow chart of rogue access point detection methodology.}
+\label{fig:rogue}
+\end{figure}
+
+% ============================================================
+\chapter{Alert and Feedback System}
+\label{ch:alert}
+
+Alerting systems are commonly built around the Integrated Public Alert and
+Warning System (IPAWS), combining the Emergency Alert System, NOAA Weather Radio
+and Wireless Emergency Alerts (WEA). In embedded terms, an alert is driven by an
+\textbf{interrupt} --- a signal to the processor indicating an event that needs
+immediate attention. When an interrupt occurs the controller finishes the current
+instruction and runs an Interrupt Service Routine (ISR). Interrupts are
+\emph{hardware} (e.g.\ a keypress, a sensor) or \emph{software} (e.g.\ a
+divide-by-zero exception).
+
+In the access-control feedback loop, the controller is configured and the UART is
+initialised. When the inbound IR sensor detects an entry, RFID data is read and
+sent to the host for login verification; on success the status is shown on the
+LCD and the gate opens, otherwise a buzzer alert fires. The outbound IR sensor
+mirrors this for exit with log-out verification. The same interrupt-driven pattern
+drives the survey's own alerts: a detected dead-zone or rogue AP raises an event
+that is pushed to the operator in real time.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm and 10mm, every node/.style={font=\footnotesize}]
+  \node[startstop] (s) {START};
+  \node[proc, below=of s] (cfg) {Set controller\\configuration};
+  \node[proc, below=of cfg] (uart) {Initialise UART};
+  \node[decision, below=of uart] (irin) {IR-in\\detected?};
+  \node[decision, right=16mm of irin] (rfin) {RFID data\\received?};
+  \node[proc, below=12mm of rfin] (login) {Send to host for\\login verification};
+  \node[proc, below=of login] (lcdin) {Display status,\\open gate (IN)};
+  \node[decision, below=of irin] (irout) {IR-out\\detected?};
+  \node[decision, left=14mm of irout] (rfout) {RFID data\\received?};
+  \node[proc, below=of rfout] (logout) {Send to host for\\out verification};
+  \node[proc, below=of logout] (lcdout) {Display status,\\open gate (OUT)};
+  \node[proc, below=10mm of lcdin] (buzz) {Buzzer alert};
+  \node[startstop, below=26mm of irout] (stop) {STOP};
+
+  \draw[flow] (s)--(cfg);
+  \draw[flow] (cfg)--(uart);
+  \draw[flow] (uart)--(irin);
+  \draw[flow] (irin)--(rfin) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (irin)--(irout) node[edgelbl,pos=0.4]{no};
+  \draw[flow] (rfin)--(login) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (login)--(lcdin);
+  \draw[flow] (lcdin)--(buzz);
+  \draw[flow] (irout)--(rfout) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (rfout)--(logout) node[edgelbl,pos=0.4]{yes};
+  \draw[flow] (logout)--(lcdout);
+  \draw[flow] (buzz)|-(stop);
+  \draw[flow] (lcdout)|-(stop);
+  \draw[flow] (irout)--(stop) node[edgelbl,pos=0.3]{no};
+\end{tikzpicture}
+\caption{Flow chart of the alert / feedback system methodology.}
+\label{fig:alert}
+\end{figure}
+
+% ============================================================
+\chapter{Real-Time Analytics Module}
+\label{ch:analytics}
+
+\textbf{Data analytics} is the process of examining data sets to draw
+conclusions, increasingly with specialised systems and software. The module here
+follows the classic pipeline: \emph{requirements specification}, \emph{collection},
+\emph{processing}, \emph{cleaning}, \emph{analysis} and \emph{communication}.
+Collected RF samples are reliability-checked; erroneous records loop back for
+re-pre-processing; valid records branch by a storage decision into offline
+(batch) or real-time streams. A filtration stage separates useful from
+unnecessary data; useful data is load-balanced across processing servers, then
+aggregated and compiled into results storage for analysis.
+
+\section{Streaming Architecture}
+The batch / real-time split maps onto a streaming pipeline: the UAV publishes
+records over MQTT to a stream processor, which writes to a time-series store that
+backs a live heatmap dashboard, while a parallel batch path retains raw captures
+for deeper offline analysis. Lightweight on-board inference can pre-filter frames
+before they leave the UAV, cutting the volume carried over the radio link and
+letting the operator watch coverage build up in real time.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=8mm and 16mm, every node/.style={font=\footnotesize}]
+  \node[startstop] (s) {START};
+  \node[proc, below=of s] (raw) {Raw data\\acquisition};
+  \node[proc, below=of raw] (pre) {Pre-processing};
+  \node[decision, below=of pre] (rel) {Reliability\\check};
+  \node[decision, below=14mm of rel] (store) {Data-storage\\decision};
+  \node[store, left=20mm of store] (dstore) {Data\\storage};
+  \node[decision, below=14mm of store] (filt) {Filtration};
+  \node[proc, right=of filt] (discard) {Discard};
+  \node[proc, below=of filt] (lb) {Load balancing};
+  \node[proc, below=of lb] (srv) {Processing servers};
+  \node[proc, below=of srv] (agg) {Aggregation,\\compilation};
+  \node[store, left=18mm of agg] (rstore) {Results\\storage};
+  \node[proc, below=of agg] (an) {Analysis};
+  \node[startstop, below=of an] (stop) {STOP};
+
+  \draw[flow] (s)--(raw);
+  \draw[flow] (raw)--(pre);
+  \draw[flow] (pre)--(rel);
+  \draw[flow] (rel.east) to[bend left=35] node[edgelbl,pos=0.5]{erroneous} (pre.east);
+  \draw[flow] (rel)--(store) node[edgelbl,pos=0.4]{error-free};
+  \draw[flow] (store)--(dstore) node[edgelbl,pos=0.4]{offline};
+  \draw[flow] (store)--(filt) node[edgelbl,pos=0.4]{real-time};
+  \draw[flow] (dstore)|-(filt) node[edgelbl,pos=0.25]{analysis};
+  \draw[flow] (filt)--(discard) node[edgelbl,pos=0.4]{unnecessary};
+  \draw[flow] (filt)--(lb) node[edgelbl,pos=0.4]{useful};
+  \draw[flow] (lb)--(srv);
+  \draw[flow] (srv)--(agg);
+  \draw[flow] (agg)--(rstore);
+  \draw[flow] (agg)--(an);
+  \draw[flow] (rstore)|-(an);
+  \draw[flow] (an)--(stop);
+\end{tikzpicture}
+\caption{Flow chart of the real-time analytics mode.}
+\label{fig:analytics}
+\end{figure}

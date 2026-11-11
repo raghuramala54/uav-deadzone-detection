@@ -1,0 +1,150 @@
+% ============================================================
+%  frontmatter.tex — title page, certificate, abstract, TOC
+% ============================================================
+
+% ----------------------- TITLE PAGE -------------------------
+\begin{titlepage}
+\centering
+\thispagestyle{empty}
+
+{\color{navy}\rule{\textwidth}{2pt}}
+\vspace{0.4cm}
+
+{\sffamily\bfseries\LARGE\color{navy}
+DEADZONE DETECTION BASED ON\\[4pt]
+PACKET SNIFFING USING UAV\par}
+
+\vspace{0.3cm}
+{\color{navy}\rule{\textwidth}{2pt}}
+
+\vspace{1.0cm}
+{\itshape\large An Internship Report submitted in partial fulfillment\\
+of the requirements for the award of the degree of\par}
+
+\vspace{0.8cm}
+{\sffamily\bfseries\Large\color{steel}
+BACHELOR OF TECHNOLOGY\par}
+\vspace{4pt}
+{\sffamily\large\color{steel} in\par}
+\vspace{4pt}
+{\sffamily\bfseries\Large\color{steel}
+COMPUTER SCIENCE AND ENGINEERING\par}
+
+\vspace{1.2cm}
+{\large Submitted by\par}
+\vspace{6pt}
+{\sffamily\bfseries\LARGE\color{navy} Raja Raghu Ram Pydi\par}
+
+\vspace{0.8cm}
+{\itshape\normalsize Internship carried out at\par}
+\vspace{4pt}
+{\bfseries\large Research Centre Imarat (RCI)\\
+Defence Research \& Development Organisation (DRDO)\\
+Hyderabad\par}
+
+\vfill
+
+\begin{tikzpicture}
+  \node[draw=line, rounded corners=4pt, fill=mist, inner sep=12pt, text width=0.8\textwidth, align=center] {
+    {\sffamily\bfseries\large\color{navy} DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING}\\[6pt]
+    {\sffamily GITAM Institute of Technology}\\[2pt]
+    {\sffamily GITAM (Deemed to be University)}\\[2pt]
+    {\sffamily Visakhapatnam, India}
+  };
+\end{tikzpicture}
+
+\end{titlepage}
+
+% ----------------------- CERTIFICATE ------------------------
+\chapter*{Certificate}
+\addcontentsline{toc}{chapter}{Certificate}
+\thispagestyle{plain}
+
+\noindent This is to certify that the internship report entitled
+\textbf{``Deadzone Detection Based on Packet Sniffing using UAV''}
+is a bonafide record of the work carried out by
+\textbf{Raja Raghu Ram Pydi} in partial fulfillment of the requirements for the
+award of the degree of \emph{Bachelor of Technology in Computer Science and
+Engineering}, GITAM (Deemed to be University). The work was undertaken during the
+summer internship at Research Centre Imarat (RCI), DRDO, Hyderabad, under the
+guidance named below.
+
+\vspace{2.2cm}
+\noindent
+\begin{tabularx}{\textwidth}{@{}X X@{}}
+\hrulefill & \hrulefill \\[2pt]
+\textbf{Dr. Santanu Chatterjee} & \textbf{Prof. Thammi Reddy} \\
+Scientist, Directorate of IT & Professor \& Head of Department \\
+RCI, DRDO, Hyderabad & Dept. of CSE, GITAM University \\
+\emph{(External Guide)} & \emph{(Internal Guide)} \\
+\end{tabularx}
+
+% ----------------------- ACKNOWLEDGEMENT --------------------
+\chapter*{Acknowledgement}
+\addcontentsline{toc}{chapter}{Acknowledgement}
+\thispagestyle{plain}
+
+\noindent I would like to express my special thanks and gratitude to my trainer
+\textbf{Dr.~Santanu Chatterjee}, Scientist, Directorate of IT, RCI, DRDO,
+Hyderabad, as well as \textbf{Prof.~Thammi Reddy}, Professor \& Head of the
+Department, CSE Department, GITAM University, Visakhapatnam, who gave me the
+golden opportunity to work on this wonderful project on the topic
+\textbf{Deadzone Detection Based on Packet Sniffing using UAV}. This project
+helped me carry out a great deal of research, and I came to learn about many new
+things. I am sincerely thankful to them.
+
+\vspace{0.8cm}
+\noindent\hfill\begin{minipage}{0.45\textwidth}\raggedleft
+\textbf{Raja Raghu Ram Pydi}\\
+Dept. of CSE, GITAM University
+\end{minipage}
+
+% ----------------------- ABSTRACT ---------------------------
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\thispagestyle{plain}
+
+\noindent As the nature of work changes, so too do the methods of automation.
+Robotic process automation and intelligent systems can help organisations
+improve the effectiveness of services faster and at lower cost than conventional
+methods --- but with important limitations. This report studies a composite
+system in which an \textbf{Unmanned Aerial Vehicle (UAV)} performs
+\emph{complete-area coverage} of a target region, continuously \textbf{sniffs
+wireless traffic}, and uses the resulting signal map to \textbf{detect wireless
+dead-zones} (regions with no usable connectivity) and \textbf{rogue access
+points}.
+
+\vspace{6pt}
+\noindent The coverage problem is cast as an optimum path-planning task over a
+grid of equidistant sensing nodes whose spacing is derived from the receiver's
+reception radius. A \textbf{Self-Organising Map (SOM)} neural network generates a
+near-optimal traversal path and is extended to \emph{avoid obstacles} by
+filtering nodes that fall inside obstacle boundaries. Flying this path, a
+Raspberry-Pi--based airborne sniffer captures 802.11 management frames; gaps in
+RSSI coverage mark dead-zones, while unexpected BSSIDs flag rogue access points.
+A real-time analytics pipeline and an alert/feedback subsystem close the loop.
+
+\vspace{6pt}
+\noindent The system is built on a \code{Scapy}-based passive capture stack that
+spans the 2.4\,GHz, 5\,GHz and 6\,GHz bands, accounts for WPA3 management-frame
+protection and client MAC randomization, and performs rogue-AP classification
+through a fusion of allow-listing, radio fingerprinting and
+security-capability analysis. Flights follow Remote-ID / DGCA-compliant practice,
+and all capture is carried out as \emph{passive}, privacy-preserving surveying
+within an \emph{authorized security-testing} context.
+
+\vspace{10pt}
+\noindent\textbf{Keywords:} UAV, Packet Sniffing, Wireless Dead-Zone, Rogue
+Access Point, Coverage Path Planning, Self-Organising Map, 802.11, RF Heatmap,
+Raspberry Pi.
+
+% ----------------------- TOC / LOF / LOT --------------------
+\cleardoublepage
+\pdfbookmark[0]{Contents}{toc}
+{\color{navy}\hypersetup{linkcolor=navy}
+\tableofcontents}
+\cleardoublepage
+{\hypersetup{linkcolor=navy}\listoffigures}
+\cleardoublepage
+{\hypersetup{linkcolor=navy}\listoftables}
+\cleardoublepage

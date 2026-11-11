@@ -1,0 +1,172 @@
+% ============================================================
+%  ch9-end.tex — Implementation, Conclusion, References
+% ============================================================
+
+\chapter{System Implementation}
+\label{ch:impl}
+
+\section{UAV Platform}
+An Unmanned Aerial Vehicle (UAV), commonly a \emph{drone}, is an aircraft without
+a human pilot on board and is one component of an Unmanned Aircraft System (UAS),
+which also includes a ground controller and a communications link. Flight may be
+autonomous or remotely piloted. A quadcopter generates lift from four rotors
+working together, each lifting roughly a quarter of the weight, which allows
+smaller, cheaper motors; movement is controlled by varying the power each motor
+delivers.
+
+\begin{table}[H]
+\centering
+\caption{Airframe components of the quadcopter platform.}
+\label{tab:parts}
+\rowcolors{2}{mist}{white}
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+\toprule
+\rowcolor{navy}
+\textcolor{white}{\textbf{Component}} & \textcolor{white}{\textbf{Purpose}}\\
+\midrule
+Frame & Centre plate, four arms and four motor brackets; aluminium / carbon fibre for strength with vibration tolerance. \\
+Motors & Four brushless motors; lighter on the battery. \\
+ESCs & Electronic speed controllers deliver power to the motors; one per arm. \\
+Propellers & Matched to the frame; plastic / carbon fibre, correctly fitted. \\
+Battery + monitor & Chosen by capacity and type; monitor warns of low charge. \\
+Autopilot & Pixhawk-class flight controller running PX4 / ArduPilot. \\
+Companion computer & Single-board computer hosting the sensing payload. \\
+RC link & Receiver for transmitter commands and telemetry. \\
+GPS + compass & Positioning for navigation and for geo-tagging samples. \\
+Camera + gimbal & Optional stabilised capture for aerial imagery. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The flight stack (PX4 / ArduPilot on a Pixhawk-class autopilot, with a companion
+computer for the payload) flies the planned coverage tour of \Cref{ch:algo} as a
+waypoint mission. Operating a sensing payload over a campus is subject to
+airspace rules: the aircraft broadcasts \textbf{Remote ID}, stays within
+authorised, geofenced airspace, and is registered where required (in India, under
+the DGCA Drone Rules 2021 and the Digital Sky platform). These constraints are
+part of the mission design rather than an afterthought.
+
+\section{Sensing Payload}
+The payload is a single-board computer (Raspberry Pi 5 / 4) carrying an external
+monitor-mode wireless adapter and a GPS module. The on-board Broadcom radio has
+limited monitor-mode support, so an external adapter with a monitor-capable
+chipset is used --- a MediaTek MT7612U for dual-band 802.11ac, or a Wi-Fi~6/6E
+adapter for 6\,GHz capture. The GPS supplies the position that tags every captured
+frame so that samples can be placed on the survey grid.
+
+\subsection{Access-point / hotspot configuration}
+For field control the companion computer exposes its own management hotspot,
+sharing a wired or cellular uplink over its wireless card. On current Raspberry Pi
+OS this is configured through \textbf{RaspAP} or the \code{nmcli device wifi
+hotspot} command (NetworkManager), which assigns the interface address, runs
+DHCP/DNS, and enables IP forwarding and NAT between the uplink and the hotspot in
+a single managed step.
+
+\subsection{Monitor-mode capture}
+A monitor interface is created on the external adapter and the capture is written
+to a PCAP for analysis, or parsed live with \code{Scapy}:
+\begin{lstlisting}[style=shell]
+# Create a monitor interface on the external adapter
+sudo airmon-ng start wlan1
+
+# Option A: capture to a file for later analysis
+sudo tcpdump -ni wlan1mon -s 0 -w survey.pcap
+
+# Option B: parse beacons live in Python (passive; management frames only)
+sudo python -m uav_sniffer.cli analyse --pcap survey.pcap \
+     --box 17.470 78.360 17.474 78.365
+\end{lstlisting}
+The captured 802.11 beacon frames (source BSSID, SSID, channel, advertised
+security and RSSI) are exactly the records required by the dead-zone and rogue-AP
+logic of \Cref{ch:dead,ch:rogue}.
+
+\section{System Specification Summary}
+\Cref{tab:spec} summarises the components that make up the system.
+
+\begin{table}[H]
+\centering
+\caption{System specification summary.}
+\label{tab:spec}
+\footnotesize
+\rowcolors{2}{mist}{white}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.26\textwidth} >{\raggedright\arraybackslash}X@{}}
+\toprule
+\rowcolor{navy}
+\textcolor{white}{\textbf{Subsystem}} & \textcolor{white}{\textbf{Choice}}\\
+\midrule
+Flight platform     & Quadcopter, Pixhawk-class autopilot, PX4 / ArduPilot \\
+Companion computer  & Raspberry Pi 5 / 4 (Raspberry Pi OS, NetworkManager) \\
+Capture radio       & External monitor-mode adapter (MT7612U / Wi-Fi 6E) \\
+Spectrum            & 2.4, 5 and 6\,GHz (Wi-Fi 6E); extensible to Wi-Fi 7 \\
+Capture stack       & Scapy / Kismet / \code{tshark}; PCAPNG + JSON \\
+Path planning       & Boustrophedon-seeded SOM with point-in-polygon culling \\
+Dead-zone model     & RSSI/SNR heatmap (IDW/RBF) with dead \& weak contours \\
+Rogue detection     & Allow-list + evil-twin + security-capability + hidden-node \\
+Analytics           & MQTT stream $\rightarrow$ time-series $\rightarrow$ live dashboard; batch retention \\
+Positioning         & On-board GPS geo-tagging per frame \\
+Compliance          & Remote ID, DGCA Drone Rules 2021 / Digital Sky, geofencing \\
+Privacy             & Salted-hash device identifiers; least-data retention \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Security, Privacy and Ethics}
+\label{sec:ethics}
+Because the system captures wireless traffic and device identifiers, it is
+operated under a strict authorised-use policy:
+\begin{itemize}
+  \item Capture only on networks you own or are contractually authorised to test;
+        keep written scope and authorisation.
+  \item Survey \emph{passively} only --- read broadcast management frames; never
+        associate, inject, deauthenticate, or decode third-party payloads.
+  \item Treat MAC/BSSID addresses as personal data --- hash or truncate them,
+        minimise retention, and account for client MAC randomization when counting
+        devices.
+  \item Comply with local radio, aviation and privacy law (DGCA Drone Rules,
+        Remote ID, and applicable data-protection obligations).
+\end{itemize}
+A man-in-the-middle interception is powerful evidence of the \emph{risk} a rogue
+AP poses, but it is never performed against third-party traffic; the accompanying
+software ships no credential-capture functionality and defaults to passive
+surveying.
+
+% ============================================================
+\chapter{Conclusion}
+This report presented an end-to-end system in which a UAV performs complete-area
+coverage of a region, passively sniffs 802.11 traffic along an obstacle-aware path
+planned by a boustrophedon-seeded Self-Organising Map, and uses the resulting
+signal map to detect wireless dead-zones and rogue access points, supported by
+alert/feedback and real-time analytics subsystems. The coverage experiments
+showed that path length scales predictably with node count and that a single
+obstacle changes run-time only marginally while leaving path length essentially
+unchanged --- confirming that obstacle-aware culling integrates cleanly with the
+planner.
+
+The detection pipeline treats coverage as a measured signal surface rather than a
+binary test, surfacing weak zones before they fail, and classifies access points
+by fusing an allow-list with evil-twin, security-capability and hidden-node
+evidence so that detection survives WPA3 protected management frames and client
+MAC randomization. The whole pipeline --- planning, passive capture across the
+2.4/5/6\,GHz bands, heatmap dead-zone extraction, rogue-AP classification and a
+streaming analytics path --- is released as a reproducible, documented
+open-source package, operated under a passive, privacy-preserving and strictly
+authorised policy.
+
+% ============================================================
+\begin{thebibliography}{99}
+\addcontentsline{toc}{chapter}{References}
+\small
+\bibitem{landrobots} \emph{Category: Land robots}, Wikipedia. \url{https://en.wikipedia.org/wiki/Category:Land_robots}
+\bibitem{zelinsky_phd} A.~Zelinsky, ``Environment Exploration and Path Planning Algorithms for a Mobile Robot using Sonar,'' Ph.D.\ dissertation, Univ.\ of Wollongong, Dept.\ of Computer Science, Oct.\ 1991.
+\bibitem{zelinsky1993} A.~Zelinsky, R.~A.~Jarvis, J.~C.~Byrne, S.~Yuta, ``Planning paths of complete coverage of an unstructured environment by a mobile robot,'' in \emph{Proc.\ Int.\ Conf.\ on Advanced Robotics}, vol.~13, Nov.\ 1993, pp.~533--538.
+\bibitem{yun2010} S.~C.~Yun, V.~Ganapathy, L.~O.~Chong, ``Improved genetic algorithms based optimum path planning for mobile robot,'' in \emph{Int.\ Conf.\ on Control, Automation, Robotics \& Vision (ICARCV)}, Dec.\ 2010, pp.~1565--1570, IEEE.
+\bibitem{jimenez2007} P.~A.~Jimenez, B.~Shirinzadeh, A.~Nicholson, G.~Alici, ``Optimal area covering using genetic algorithms,'' in \emph{IEEE/ASME Int.\ Conf.\ on Advanced Intelligent Mechatronics}, Sep.\ 2007, pp.~1--5.
+\bibitem{tsp_compare} \emph{Comparison of TSP Algorithms}, SlideShare. \url{https://www.slideshare.net/kaalnath/comparison-of-tsp-algorithms}
+\bibitem{youtube_tsp} \emph{Travelling Salesman / path heuristics}, video. \url{https://www.youtube.com/watch?v=q6fPk0--eHY}
+\bibitem{makeuseof} \emph{What is a wireless dead zone and how to eliminate it}, MakeUseOf. \url{https://www.makeuseof.com/tag/what-is-a-wireless-dead-zone-and-how-to-eliminate-it/}
+\bibitem{zone13} \emph{Wi-Fi monitoring using Raspberry Pi}, Zone13. \url{https://zone13.io/post/wifi-monitoring-using-raspberry-pi/}
+\bibitem{scapy} P.~Biondi \emph{et al.}, \emph{Scapy: Packet crafting for Python}. \url{https://scapy.net}
+\bibitem{kismet} \emph{Kismet: wireless network detector, sniffer and WIDS}. \url{https://www.kismetwireless.net}
+\bibitem{dgca} Ministry of Civil Aviation (India), \emph{Drone Rules 2021} \& Digital Sky platform.
+\bibitem{faa_rid} U.S.\ FAA, \emph{Remote Identification of Unmanned Aircraft}, Final Rule, 14 CFR Part 89.
+\end{thebibliography}

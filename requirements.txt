@@ -1,0 +1,11 @@
+# Core (always required)
+numpy>=1.24
+
+# Optional: live/offline 802.11 capture  (pip install scapy)
+scapy>=2.5
+
+# Optional: heatmap plotting             (pip install matplotlib)
+matplotlib>=3.7
+
+# Dev / testing
+pytest>=7.4
