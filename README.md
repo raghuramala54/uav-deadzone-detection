@@ -16,7 +16,7 @@ passively **sniffs 802.11 traffic** along it, and turns the result into a
 
 </div>
 
-> **About.** This repository is the engineering companion to the B.Tech internship
+> **About.** This repository is the internship
 > report *“Deadzone Detection Based on Packet Sniffing using UAV”*, carried out at
 > **Research Centre Imarat (RCI), DRDO, Hyderabad**. It implements the full
 > pipeline as a tested, documented Python package: obstacle-aware coverage
